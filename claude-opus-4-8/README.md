@@ -6,6 +6,10 @@ Opus 4.8 이 **FireMonkey 실제 3D · 1인칭 시점 게임**으로 재구성�
 미로 생성(Recursive Backtracking)과 경로 탐색(BFS) 코어 로직은 그대로 계승하고,
 3D 렌더링·자유 이동(FPS) 조작·게임 요소를 새로 구현했습니다.
 
+## 다운로드 (델파이 없이 실행)
+
+델파이가 없다면 미리 빌드된 실행 파일을 받으세요: [Releases → opus-4.8](https://github.com/civilian7/MazeDemo/releases/tag/opus-4.8) 의 `MazeDemo3D-opus-4.8-win64.zip` 압축 해제 후 `MazeDemo3D.exe` 실행 (Windows 64-bit, 설치 불필요).
+
 ## 빌드 / 실행
 
 - 환경: **Delphi 13 (Studio 37.0) · FireMonkey · Win64**

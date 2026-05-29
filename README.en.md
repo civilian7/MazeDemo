@@ -17,6 +17,10 @@
 
 The folder name denotes the **model used to implement it**. Every implementation starts from the same requirements (see Shared Concept below).
 
+## Download (no Delphi needed)
+
+- **Opus 4.8 (Win64)** prebuilt binary: grab `MazeDemo3D-opus-4.8-win64.zip` from [Releases → opus-4.8](https://github.com/civilian7/MazeDemo/releases/tag/opus-4.8), unzip, and run `MazeDemo3D.exe` (no install required).
+
 ## Shared Concept
 
 - Maze generation: **Recursive Backtracking**

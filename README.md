@@ -15,6 +15,10 @@
 
 폴더명은 **구현에 사용한 모델**을 뜻합니다. 모든 구현은 같은 요구사항(아래 공통 컨셉)에서 출발합니다.
 
+## 다운로드 (델파이 없이 실행)
+
+- **Opus 4.8 (Win64)** 실행 파일: [Releases → opus-4.8](https://github.com/civilian7/MazeDemo/releases/tag/opus-4.8) 의 `MazeDemo3D-opus-4.8-win64.zip` 다운로드 후 압축 해제하고 `MazeDemo3D.exe` 실행 (별도 설치 불필요)
+
 ## 공통 컨셉
 
 - 미로 생성: **Recursive Backtracking**
