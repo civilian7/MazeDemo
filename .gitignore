@@ -1,0 +1,50 @@
+# Delphi / RAD Studio build artifacts
+__history/
+__recovery/
+__dcu/
+__bin/
+*.dcu
+*.o
+*.obj
+*.exe
+*.dll
+*.bpl
+*.bpi
+*.map
+*.drc
+*.dres
+*.rsm
+*.tds
+*.dcp
+*.so
+*.apk
+
+# IDE / local state
+*.local
+*.identcache
+*.projdata
+*.tvsconfig
+*.dsk
+*.~*
+*.skincfg
+modules/
+
+# Platform output dirs
+Win32/
+Win64/
+Android/
+Android64/
+iOSDevice64/
+OSX64/
+OSXARM64/
+Linux64/
+
+# Logs (runtime)
+logs/
+
+# Local Claude Code settings
+.claude/
+
+# Archives (redundant with source)
+*.7z
+*.zip
