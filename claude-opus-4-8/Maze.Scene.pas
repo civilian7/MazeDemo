@@ -570,11 +570,12 @@ end;
 
 procedure TMazeScene.CreateMaterials;
 begin
-  FWallMaterial := NewLightMaterial($FFFFFFFF, $FF1A1410, $FF000000);
+  // Ambient(주변광)를 거의 0으로 → 라이트가 닿지 않는 곳은 진짜 어둡게(대비 강화)
+  FWallMaterial := NewLightMaterial($FFFFFFFF, $FF060504, $FF000000);
   FWallMaterial.Texture := FBrickBitmap;
-  FFloorMaterial := NewLightMaterial($FFFFFFFF, $FF0C0C0E, $FF000000);
+  FFloorMaterial := NewLightMaterial($FFFFFFFF, $FF040404, $FF000000);
   FFloorMaterial.Texture := FFloorBitmap;
-  FCeilingMaterial := NewLightMaterial($FF26242A, $FF050505, $FF000000);
+  FCeilingMaterial := NewLightMaterial($FF26242A, $FF020203, $FF000000);
   FCoinMaterial := NewLightMaterial($FFFFD54A, $FF000000, $FF8A6A00);
   FKeyMaterial := NewLightMaterial($FF6CE0FF, $FF000000, $FF0A6A8A);
   FExitMaterial := NewLightMaterial($FFFF5050, $FF000000, $FF8A0000);
@@ -655,8 +656,8 @@ begin
   FTorch := TLight.Create(FAssets);
   FTorch.Parent := FCamera;
   FTorch.LightType := TLightType.Point;
-  // 벽 횃불이 분위기를 주도하도록 헤드램프는 은은하게
-  FTorch.Color := $FF8A7A55;
+  // 헤드램프는 길을 잃지 않을 최소한의 손전등 수준. 어둠이 살아있도록 매우 약하게.
+  FTorch.Color := $FF241E14;
   FTorch.Position.Point := Point3D(0, -0.2, 0);
 end;
 
@@ -718,11 +719,11 @@ begin
     var LLight := FTorchLights[Slot];
     LLight.Position.Point := FTorchPoints[LBest];
 
-    // 횃불마다 위상 다른 깜빡임으로 자연스러운 흔들림
-    var LFlk := 0.7 + 0.3 * Sin(FFlicker * 11.0 + Slot * 1.7);
+    // 횃불마다 위상 다른 깜빡임으로 자연스러운 흔들림(거의 최대 강도로 밝게)
+    var LFlk := 0.82 + 0.18 * Sin(FFlicker * 11.0 + Slot * 1.7);
     var LR := Round(255 * LFlk);
-    var LG := Round(150 * LFlk);
-    var LB := Round(51 * LFlk);
+    var LG := Round(178 * LFlk);
+    var LB := Round(96 * LFlk);
     LLight.Color := TAlphaColor($FF000000) or (Cardinal(LR) shl 16) or
       (Cardinal(LG) shl 8) or Cardinal(LB);
   end;
