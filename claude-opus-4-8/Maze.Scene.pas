@@ -7,6 +7,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.Types,
+  System.Math.Vectors,
   System.Generics.Collections,
   FMX.Graphics,
   FMX.Types3D,
@@ -50,6 +51,8 @@ type
     FCoinMaterial: TLightMaterialSource;
     FKeyMaterial: TLightMaterialSource;
     FExitMaterial: TLightMaterialSource;
+    FFlameMaterial: TLightMaterialSource;
+    FBracketMaterial: TLightMaterialSource;
     FTorch: TLight;
     FItems: TList<TMazeItem>;
     FCoinObjects: TList<TControl3D>;
@@ -58,14 +61,23 @@ type
     FTrailBuilt: Boolean;
     FCoinTotal: Integer;
     FBrickBitmap: TBitmap;
+    FFloorBitmap: TBitmap;
+
+    FFlameObjects: TList<TControl3D>;
+    FTorchLights: TList<TLight>;
+    FTorchPoints: TList<TPoint3D>;
+    FFlicker: Single;
     function  NewLightMaterial(const ADiffuse, AAmbient, AEmissive: Cardinal): TLightMaterialSource;
     procedure CreateBrickTexture;
+    procedure CreateStoneFloorTexture;
     procedure CreateMaterials;
     procedure BuildFloorAndCeiling(const AMaze: TMazeGenerator);
     procedure BuildWalls(const AMaze: TMazeGenerator);
     procedure BuildExitPortal(const AMaze: TMazeGenerator);
     procedure BuildItems(const AMaze: TMazeGenerator; const ACoinCount: Integer);
+    procedure BuildTorches(const AMaze: TMazeGenerator);
     procedure CreateTorch;
+    procedure UpdateTorchLights(const ADt: Single);
     function  AddWallCube(const ACenterX, ACenterZ, AWidth, ADepth: Single): TCube;
   public
     constructor Create(const AViewport: TViewport3D; const ACamera: TCamera);
@@ -112,7 +124,6 @@ implementation
 uses
   System.UITypes,
   System.Math,
-  System.Math.Vectors,
   FMX.Types,
   Maze.Player;
 {$ENDREGION}
@@ -126,8 +137,13 @@ begin
   FItems := TList<TMazeItem>.Create;
   FCoinObjects := TList<TControl3D>.Create;
   FTrailObjects := TList<TControl3D>.Create;
+  FFlameObjects := TList<TControl3D>.Create;
+  FTorchLights := TList<TLight>.Create;
+  FTorchPoints := TList<TPoint3D>.Create;
   FBrickBitmap := TBitmap.Create;
+  FFloorBitmap := TBitmap.Create;
   CreateBrickTexture;
+  CreateStoneFloorTexture;
 end;
 
 destructor TMazeScene.Destroy;
@@ -136,7 +152,11 @@ begin
   FItems.Free;
   FCoinObjects.Free;
   FTrailObjects.Free;
+  FFlameObjects.Free;
+  FTorchLights.Free;
+  FTorchPoints.Free;
   FBrickBitmap.Free;
+  FFloorBitmap.Free;
   inherited;
 end;
 
@@ -166,6 +186,7 @@ begin
   BuildWalls(AMaze);
   BuildExitPortal(AMaze);
   BuildItems(AMaze, ACoinCount);
+  BuildTorches(AMaze);
   CreateTorch;
 end;
 
@@ -318,6 +339,114 @@ begin
   end;
 end;
 
+procedure TMazeScene.BuildTorches(const AMaze: TMazeGenerator);
+const
+  TORCH_Y = -WALL_HEIGHT * 0.62;   // 벽 중상단 높이
+  MOUNT_OFFSET = CELL_SIZE / 2 - 0.35;
+  LIGHT_POOL = 6;
+begin
+  for var Y := 0 to AMaze.Height - 1 do
+  begin
+    for var X := 0 to AMaze.Width - 1 do
+    begin
+      // 2칸 간격으로만 배치
+      if Odd(X) or Odd(Y) then
+      begin
+        Continue;
+      end;
+
+      var LWalls := AMaze.WallsAt(X, Y);
+      var LCenterX := X * CELL_SIZE + CELL_SIZE / 2;
+      var LCenterZ := Y * CELL_SIZE + CELL_SIZE / 2;
+
+      // 벽 우선순위: 남(wBottom) → 동(wRight) → 북(wTop) → 서(wLeft)
+      // 불꽃은 항상 열린 칸(셀 중심) 쪽으로 약간 돌출시킨다.
+      var LFx := LCenterX;
+      var LFz := LCenterZ;
+      var LFound := False;
+
+      if wBottom in LWalls then
+      begin
+        LFx := LCenterX;
+        LFz := LCenterZ + MOUNT_OFFSET;
+        LFound := True;
+      end
+      else
+      if wRight in LWalls then
+      begin
+        LFx := LCenterX + MOUNT_OFFSET;
+        LFz := LCenterZ;
+        LFound := True;
+      end
+      else
+      if (Y = 0) and (wTop in LWalls) then
+      begin
+        LFx := LCenterX;
+        LFz := LCenterZ - MOUNT_OFFSET;
+        LFound := True;
+      end
+      else
+      if (X = 0) and (wLeft in LWalls) then
+      begin
+        LFx := LCenterX - MOUNT_OFFSET;
+        LFz := LCenterZ;
+        LFound := True;
+      end;
+
+      if not LFound then
+      begin
+        Continue;
+      end;
+
+      // 브래킷(벽에서 살짝 튀어나온 어두운 받침)
+      var LBracket := TCube.Create(FAssets);
+      LBracket.Parent := FRoot;
+      LBracket.Width := 0.25;
+      LBracket.Height := 0.5;
+      LBracket.Depth := 0.25;
+      LBracket.Position.Point := Point3D(LFx, TORCH_Y + 0.35, LFz);
+      LBracket.MaterialSource := FBracketMaterial;
+      LBracket.HitTest := False;
+
+      // 불꽃(주황 발광 구체)
+      var LFlame := TSphere.Create(FAssets);
+      LFlame.Parent := FRoot;
+      LFlame.Width := 0.55;
+      LFlame.Height := 0.75;
+      LFlame.Depth := 0.55;
+      LFlame.Position.Point := Point3D(LFx, TORCH_Y, LFz);
+      LFlame.MaterialSource := FFlameMaterial;
+      LFlame.HitTest := False;
+
+      FFlameObjects.Add(LFlame);
+      FTorchPoints.Add(Point3D(LFx, TORCH_Y, LFz));
+    end;
+  end;
+
+  // 실제 조명 풀 생성(가까운 횃불로 매 프레임 재배치)
+  var LPool := LIGHT_POOL;
+
+  if LPool > FTorchPoints.Count then
+  begin
+    LPool := FTorchPoints.Count;
+  end;
+
+  for var I := 0 to LPool - 1 do
+  begin
+    var LLight := TLight.Create(FAssets);
+    LLight.Parent := FRoot;
+    LLight.LightType := TLightType.Point;
+    LLight.Color := $FFFF9633;
+
+    if I < FTorchPoints.Count then
+    begin
+      LLight.Position.Point := FTorchPoints[I];
+    end;
+
+    FTorchLights.Add(LLight);
+  end;
+end;
+
 procedure TMazeScene.BuildWalls(const AMaze: TMazeGenerator);
 begin
   for var Y := 0 to AMaze.Height - 1 do
@@ -360,6 +489,10 @@ begin
   FItems.Clear;
   FCoinObjects.Clear;
   FTrailObjects.Clear;
+  FFlameObjects.Clear;
+  FTorchLights.Clear;
+  FTorchPoints.Clear;
+  FFlicker := 0;
   FTrailMaterial := nil;
   FTrailBuilt := False;
   FCoinTotal := 0;
@@ -371,6 +504,8 @@ begin
   FCoinMaterial := nil;
   FKeyMaterial := nil;
   FExitMaterial := nil;
+  FFlameMaterial := nil;
+  FBracketMaterial := nil;
 
   // 모든 FMX 오브젝트는 FAssets 소유 → 한 번에 해제
   FreeAndNil(FAssets);
@@ -437,11 +572,82 @@ procedure TMazeScene.CreateMaterials;
 begin
   FWallMaterial := NewLightMaterial($FFFFFFFF, $FF1A1410, $FF000000);
   FWallMaterial.Texture := FBrickBitmap;
-  FFloorMaterial := NewLightMaterial($FF4A4640, $FF0A0A0A, $FF000000);
+  FFloorMaterial := NewLightMaterial($FFFFFFFF, $FF0C0C0E, $FF000000);
+  FFloorMaterial.Texture := FFloorBitmap;
   FCeilingMaterial := NewLightMaterial($FF26242A, $FF050505, $FF000000);
   FCoinMaterial := NewLightMaterial($FFFFD54A, $FF000000, $FF8A6A00);
   FKeyMaterial := NewLightMaterial($FF6CE0FF, $FF000000, $FF0A6A8A);
   FExitMaterial := NewLightMaterial($FFFF5050, $FF000000, $FF8A0000);
+
+  // 횃불 불꽃: 강한 주황색 발광으로 항상 빛나 보이게
+  FFlameMaterial := NewLightMaterial($FFFF8A1E, $FF000000, $FFFF7A14);
+  // 횃불 브래킷: 어두운 금속/목재 느낌
+  FBracketMaterial := NewLightMaterial($FF2A2018, $FF050402, $FF000000);
+end;
+
+procedure TMazeScene.CreateStoneFloorTexture;
+const
+  TEX_SIZE = 256;
+  TILES = 6;
+begin
+  FFloorBitmap.SetSize(TEX_SIZE, TEX_SIZE);
+
+  var LTile := TEX_SIZE / TILES;
+  var LCanvas := FFloorBitmap.Canvas;
+
+  LCanvas.BeginScene;
+  try
+    // 줄눈(타일 사이 어두운 틈) 배경
+    LCanvas.Clear(TAlphaColor($FF15151A));
+
+    LCanvas.Fill.Kind := TBrushKind.Solid;
+    LCanvas.Stroke.Kind := TBrushKind.Solid;
+    LCanvas.Stroke.Color := TAlphaColor($FF101014);
+    LCanvas.Stroke.Thickness := 1;
+
+    for var R := 0 to TILES - 1 do
+    begin
+      for var C := 0 to TILES - 1 do
+      begin
+        var LX := C * LTile + 1.5;
+        var LY := R * LTile + 1.5;
+        var LRect := RectF(LX, LY, LX + LTile - 3, LY + LTile - 3);
+
+        // 타일마다 회색 명도를 약간씩 다르게(석재 얼룩)
+        var LShade := 60 + RandomRange(0, 26);
+        var LColor := TAlphaColor($FF000000) or (Cardinal(LShade) shl 16) or
+          (Cardinal(LShade) shl 8) or Cardinal(LShade);
+
+        LCanvas.Fill.Color := LColor;
+        LCanvas.FillRect(LRect, 2);
+        LCanvas.DrawRect(LRect, 2, 2, AllCorners, 1);
+
+        // 점 노이즈로 거친 질감
+        for var N := 0 to 14 do
+        begin
+          var LNx := LX + RandomRange(0, Round(LTile - 4));
+          var LNy := LY + RandomRange(0, Round(LTile - 4));
+          var LSpeck := LShade + RandomRange(-18, 18);
+
+          if LSpeck < 0 then
+          begin
+            LSpeck := 0;
+          end;
+
+          if LSpeck > 255 then
+          begin
+            LSpeck := 255;
+          end;
+
+          LCanvas.Fill.Color := TAlphaColor($FF000000) or (Cardinal(LSpeck) shl 16) or
+            (Cardinal(LSpeck) shl 8) or Cardinal(LSpeck);
+          LCanvas.FillRect(RectF(LNx, LNy, LNx + 2, LNy + 2), 0);
+        end;
+      end;
+    end;
+  finally
+    LCanvas.EndScene;
+  end;
 end;
 
 procedure TMazeScene.CreateTorch;
@@ -449,8 +655,77 @@ begin
   FTorch := TLight.Create(FAssets);
   FTorch.Parent := FCamera;
   FTorch.LightType := TLightType.Point;
-  FTorch.Color := $FFFFF0D0;
+  // 벽 횃불이 분위기를 주도하도록 헤드램프는 은은하게
+  FTorch.Color := $FF8A7A55;
   FTorch.Position.Point := Point3D(0, -0.2, 0);
+end;
+
+procedure TMazeScene.UpdateTorchLights(const ADt: Single);
+begin
+  if (FTorchLights.Count = 0) or (FTorchPoints.Count = 0) then
+  begin
+    Exit;
+  end;
+
+  FFlicker := FFlicker + ADt;
+
+  // 불꽃 발광 깜빡임(전체 공유 머티리얼) — 두 주황 사이를 진동
+  if Assigned(FFlameMaterial) then
+  begin
+    var LPulse := 0.5 + 0.5 * Sin(FFlicker * 9.0);
+    var LR := 220 + Round(LPulse * 35);
+    var LG := 90 + Round(LPulse * 45);
+    FFlameMaterial.Emissive := TAlphaColor($FF000000) or (Cardinal(LR) shl 16) or
+      (Cardinal(LG) shl 8) or Cardinal(20);
+  end;
+
+  // 플레이어(카메라) 위치 기준 가장 가까운 횃불로 풀 라이트 재배치
+  var LCam := FCamera.Position.Point;
+
+  var LUsed: TArray<Boolean>;
+  SetLength(LUsed, FTorchPoints.Count);
+
+  for var Slot := 0 to FTorchLights.Count - 1 do
+  begin
+    var LBest := -1;
+    var LBestDist := MaxSingle;
+
+    for var I := 0 to FTorchPoints.Count - 1 do
+    begin
+      if LUsed[I] then
+      begin
+        Continue;
+      end;
+
+      var LDx := FTorchPoints[I].X - LCam.X;
+      var LDz := FTorchPoints[I].Z - LCam.Z;
+      var LDist := LDx * LDx + LDz * LDz;
+
+      if LDist < LBestDist then
+      begin
+        LBestDist := LDist;
+        LBest := I;
+      end;
+    end;
+
+    if LBest < 0 then
+    begin
+      Break;
+    end;
+
+    LUsed[LBest] := True;
+
+    var LLight := FTorchLights[Slot];
+    LLight.Position.Point := FTorchPoints[LBest];
+
+    // 횃불마다 위상 다른 깜빡임으로 자연스러운 흔들림
+    var LFlk := 0.7 + 0.3 * Sin(FFlicker * 11.0 + Slot * 1.7);
+    var LR := Round(255 * LFlk);
+    var LG := Round(150 * LFlk);
+    var LB := Round(51 * LFlk);
+    LLight.Color := TAlphaColor($FF000000) or (Cardinal(LR) shl 16) or
+      (Cardinal(LG) shl 8) or Cardinal(LB);
+  end;
 end;
 
 function TMazeScene.NewLightMaterial(const ADiffuse, AAmbient, AEmissive: Cardinal): TLightMaterialSource;
@@ -589,6 +864,8 @@ begin
       LObj.RotationAngle.Y := LObj.RotationAngle.Y + LSpin;
     end;
   end;
+
+  UpdateTorchLights(ADt);
 end;
 {$ENDREGION}
 
